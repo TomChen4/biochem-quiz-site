@@ -41,12 +41,19 @@ function loadSettings(){ try{ const raw = localStorage.getItem(SETTINGS_KEY); re
 async function tryLoadInitialBank() {
   try {
     const params = new URLSearchParams(location.search);
-    const url = params.get('bank') || 'questions.json';
-    const res = await fetch(url, { cache: 'no-store' });
+    let url = params.get('bank') || 'questions.json';
+
+    // Bust CDN/browser cache without user doing anything
+    const version = import.meta.env.VITE_APP_COMMIT || Date.now();
+    const sep = url.includes('?') ? '&' : '?';
+    const res = await fetch(`${url}${sep}v=${version}`, { cache: 'no-store' });
+
     if (!res.ok) return null;
     const data = await res.json();
     return Array.isArray(data) ? data : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function shuffle(arr){ for(let i=arr.length-1; i>0; i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
@@ -55,8 +62,9 @@ const clsx=(...xs)=>xs.filter(Boolean).join(" ");
 function Quiz() {
   const persisted = loadState();
   const persistedSettings = loadSettings();
-
-  const [bank, setBank] = useState(persisted?.bank?.length ? persisted.bank : []);
+  
+  // Always fetch the latest bank (don’t restore it from localStorage)
+  const [bank, setBank] = useState([]);
   const [index, setIndex] = useState(persisted?.index ?? 0);
   const [order, setOrder] = useState(persisted?.order ?? []);
   const [selected, setSelected] = useState(null);
@@ -72,13 +80,15 @@ function Quiz() {
   const [shuffleOptions, setShuffleOptions] = useState(persistedSettings?.shuffleOpts ?? true);
   const [compactMode, setCompactMode] = useState(persistedSettings?.compact ?? false);
 
-  useEffect(()=>{ saveState({ bank, index, order, score, attempts, streak, wrongIds:[...wrongIds] }); }, [bank,index,order,score,attempts,streak,wrongIds]);
+  useEffect(()=>{ 
+    // Save progress only — not the bank
+    saveState({ index, order, score, attempts, streak, wrongIds:[...wrongIds] });
+  }, [index,order,score,attempts,streak,wrongIds]);
   useEffect(()=>{ saveSettings({ onlyWrong:showOnlyWrong, noRepeat:noRepeatUntilAll, shuffleOpts:shuffleOptions, compact:compactMode }); }, [showOnlyWrong,noRepeatUntilAll,shuffleOptions,compactMode]);
 
   useEffect(()=>{
     (async () => {
-      if (bank.length) return;
-      const loaded = await tryLoadInitialBank();
+      const loaded = await tryLoadInitialBank(); // always fetch latest
       if (loaded?.length) {
         setBank(loaded);
         setOrder(shuffle([...Array(loaded.length).keys()]));
