@@ -403,31 +403,44 @@ function Footer(){
 }
 
 // RAW parser (A) lines + ANSWER: X
+
 function parseRawBank(raw){
-  const cleaned = raw.replace(/\\r/g, "");
-  const regex = /(.*?)(?:\\n|^)\\s*ANSWER:\\s*([A-F])\\s*(?=\\n|$)/gs;
+  const cleaned = raw.replace(/\r/g, "");
+  // find blocks ending with "ANSWER: X" where X is A-F
+  const regex = /(.*?)(?:\n|^)\s*ANSWER:\s*([A-F])\s*(?=\n|$)/gs;
   const blocks = [];
   let match;
   while ((match = regex.exec(cleaned))){
     const block = match[1].trim();
     const answer = match[2].trim();
-    const optRegex = /\\n\\s*([A-F])\\)\\s*(.+?)(?=(?:\\n\\s*[A-F]\\)|$))/gs;
-    const firstOptIdx = block.search(/\\n\\s*[A-F]\\)\\s*/);
+
+    // split into lines and find the first option line "A) ..."
+    const lines = block.split(/\n/);
+    let aIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*[A-F]\)\s+/.test(lines[i])) { aIndex = i; break; }
+    }
+
     let stem = block;
     let opts = [];
-    if (firstOptIdx !== -1){
-      stem = block.slice(0, firstOptIdx).trim();
-      let m;
-      while ((m = optRegex.exec(block)) !== null){
-        opts.push({ key: m[1].trim(), text: m[2].trim() });
+    if (aIndex !== -1){
+      stem = lines.slice(0, aIndex).join("\n").trim();
+      for (let i = aIndex; i < lines.length; i++){
+        const m = lines[i].match(/^\s*([A-F])\)\s*(.+)\s*$/);
+        if (m){ opts.push({ key: m[1].trim(), text: m[2].trim() }); }
       }
     }
-    let id = undefined;
-    const idEnd = stem.match(/(\\d{1,4})\\s*$/);
-    const idStart = stem.match(/^(\\d{1,4})\\s*[\\).:-]?\\s*/);
+
+    // Try to infer id
+    let id;
+    const idEnd = stem.match(/(\d{1,4})\s*$/);
+    const idStart = stem.match(/^(\d{1,4})\s*[\).:-]?\s*/);
     if (idEnd) id = idEnd[1];
     else if (idStart) id = idStart[1];
-    stem = stem.replace(/^\\?\\s*/, "").trim();
+
+    // Clean stem (remove leading stray '?')
+    stem = stem.replace(/^\?\s*/, "").trim();
+
     if (stem && opts.length >= 2){
       blocks.push({ id: id ?? crypto.randomUUID(), text: stem, options: opts, answer: answer });
     }
