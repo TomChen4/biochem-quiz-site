@@ -18,6 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: echo "VITE_APP_COMMIT=${GITHUB_SHA}" >> $GITHUB_ENV
       - run: npm ci || npm i
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
